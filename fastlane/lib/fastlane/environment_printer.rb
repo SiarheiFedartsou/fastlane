@@ -2,6 +2,12 @@ module Fastlane
   class EnvironmentPrinter
     def self.output
       env_info = get
+
+      # Remove sensitive option values
+      FastlaneCore::Configuration.sensitive_strings.compact.each do |sensitive_element|
+        env_info.gsub!(sensitive_element, "#########")
+      end
+
       puts env_info
       if FastlaneCore::Helper.mac? && UI.interactive? && UI.confirm("🙄  Wow, that's a lot of markdown text... should fastlane put it into your clipboard, so you can easily paste it on GitHub?")
         copy_to_clipboard(env_info)
@@ -28,10 +34,10 @@ module Fastlane
       env_tail = "</details>"
       final_output = ""
 
-      if $captured_output
+      if FastlaneCore::Globals.captured_output?
         final_output << "### Captured Output\n\n"
         final_output << "Command Used: `#{ARGV.join(' ')}`\n"
-        final_output << "<details><summary>Output/Log</summary>\n\n```\n\n#{$captured_output}\n\n```\n\n</details>\n\n"
+        final_output << "<details><summary>Output/Log</summary>\n\n```\n\n#{FastlaneCore::Globals.captured_output}\n\n```\n\n</details>\n\n"
       end
 
       final_output << env_header + env_output + env_tail
@@ -56,17 +62,16 @@ module Fastlane
         table << "|--------|---------|\n"
         plugin_manager.available_plugins.each do |plugin|
           begin
-          installed_version = Fastlane::ActionCollector.determine_version(plugin)
-          update_url = FastlaneCore::UpdateChecker.generate_fetch_url(plugin)
-          latest_version = FastlaneCore::UpdateChecker.fetch_latest(update_url)
-          if Gem::Version.new(installed_version) == Gem::Version.new(latest_version)
-            update_status = "✅ Up-To-Date"
-          else
-            update_status = "🚫 Update availaible"
+            installed_version = Fastlane::ActionCollector.determine_version(plugin)
+            latest_version = FastlaneCore::UpdateChecker.fetch_latest(plugin)
+            if Gem::Version.new(installed_version) == Gem::Version.new(latest_version)
+              update_status = "✅ Up-To-Date"
+            else
+              update_status = "🚫 Update available"
+            end
+          rescue
+            update_status = "💥 Check failed"
           end
-        rescue
-          update_status = "💥 Check failed"
-        end
           table << "| #{plugin} | #{installed_version} | #{update_status} |\n"
         end
 
@@ -101,12 +106,11 @@ module Fastlane
 
         next unless fastlane_tools.include?(current_gem.name.to_sym)
         begin
-          update_url = FastlaneCore::UpdateChecker.generate_fetch_url(current_gem.name)
-          latest_version = FastlaneCore::UpdateChecker.fetch_latest(update_url)
-          if Gem::Version.new(current_gem.version) == Gem::Version.new(latest_version)
+          latest_version = FastlaneCore::UpdateChecker.fetch_latest(current_gem.name)
+          if Gem::Version.new(current_gem.version) >= Gem::Version.new(latest_version)
             update_status = "✅ Up-To-Date"
           else
-            update_status = "🚫 Update availaible"
+            update_status = "🚫 Update available"
           end
         rescue
           update_status = "💥 Check failed"
@@ -211,12 +215,19 @@ module Fastlane
         "Host" => "#{product} #{version} (#{build})",
         "Ruby Lib Dir" => anonymized_path(RbConfig::CONFIG['libdir']),
         "OpenSSL Version" => OpenSSL::OPENSSL_VERSION,
-        "Is contained" => Helper.contained_fastlane?.to_s
+        "Is contained" => Helper.contained_fastlane?.to_s,
+        "Is homebrew" => Helper.homebrew?.to_s,
+        "Is installed via Fabric.app" => Helper.mac_app?.to_s
       }
 
       if Helper.mac?
         table_content["Xcode Path"] = anonymized_path(Helper.xcode_path)
-        table_content["Xcode Version"] = Helper.xcode_version
+        begin
+          table_content["Xcode Version"] = Helper.xcode_version
+        rescue => ex
+          UI.error(ex)
+          UI.error("Could not get Xcode Version")
+        end
       end
 
       table = ["| Key | Value |"]
@@ -247,7 +258,7 @@ module Fastlane
         env_output << "\n"
         env_output << "```ruby\n"
         env_output <<  File.read(fastlane_path)
-        env_output <<  "```\n"
+        env_output <<  "\n```\n"
         env_output << "</details>"
       else
         env_output << "**No Fastfile found**\n"
@@ -261,7 +272,7 @@ module Fastlane
         env_output << "\n"
         env_output << "```ruby\n"
         env_output <<  File.read(appfile_path)
-        env_output <<  "```\n"
+        env_output <<  "\n```\n"
         env_output << "</details>"
       else
         env_output << "**No Appfile found**\n"

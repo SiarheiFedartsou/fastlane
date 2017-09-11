@@ -5,12 +5,12 @@ module Fastlane
     # Does a hard reset and clean on the repo
     class ResetGitRepoAction < Action
       def self.run(params)
-        if params[:force] || params[:force] || Actions.lane_context[SharedValues::GIT_REPO_WAS_CLEAN_ON_START]
+        if params[:force] || Actions.lane_context[SharedValues::GIT_REPO_WAS_CLEAN_ON_START]
           paths = params[:files]
 
           return paths if Helper.is_test?
 
-          if (paths || []).count == 0
+          if paths.nil?
             Actions.sh('git reset --hard HEAD')
 
             clean_options = ['q', 'f', 'd']
@@ -41,7 +41,7 @@ module Fastlane
       end
 
       def self.description
-        "Resets git repo to a clean state by discarding uncommited changes"
+        "Resets git repo to a clean state by discarding uncommitted changes"
       end
 
       def self.details
@@ -99,7 +99,7 @@ module Fastlane
                                        default_value: true),
           FastlaneCore::ConfigItem.new(key: :exclude,
                                        env_name: "FL_RESET_GIT_EXCLUDE",
-                                       description: "You can pass a string, or array of, file pattern(s) here which you want to have survive the cleaning process, and remain on disk. E.g. to leave the `artifacts` directory you would specify `exclude: 'artifacts'`. Make sure this pattern is also in your gitignore! See the gitignore documentation for info on patterns",
+                                       description: "You can pass a string, or array of, file pattern(s) here which you want to have survive the cleaning process, and remain on disk, e.g. to leave the `artifacts` directory you would specify `exclude: 'artifacts'`. Make sure this pattern is also in your gitignore! See the gitignore documentation for info on patterns",
                                        is_string: false,
                                        optional: true)
         ]

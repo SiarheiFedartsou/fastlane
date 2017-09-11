@@ -25,22 +25,22 @@ module FastlaneCore
         end
 
         output.split(/\n/).each do |line|
+          next if line =~ /unavailable/
           next if line =~ /^== /
           if line =~ /^-- /
             (os_type, os_version) = line.gsub(/-- (.*) --/, '\1').split
           else
-            # iPad 2 (0EDE6AFC-3767-425A-9658-AAA30A60F212) (Shutdown)
-            # iPad Air 2 (4F3B8059-03FD-4D72-99C0-6E9BBEE2A9CE) (Shutdown) (unavailable, device type profile not found)
-            if line.include?("inch)")
-              # For Xcode 8, where sometimes we have the # of inches in ()
-              # iPad Pro (12.9 inch) (CEF11EB3-79DF-43CB-896A-0F33916C8BDE) (Shutdown)
-              match = line.match(/\s+([^\(]+ \(.*inch\)) \(([-0-9A-F]+)\) \(([^\(]+)\)(.*unavailable.*)?/)
-            else
-              match = line.match(/\s+([^\(]+) \(([-0-9A-F]+)\) \(([^\(]+)\)(.*unavailable.*)?/)
-            end
 
-            if match && !match[4] && (os_type == requested_os_type || requested_os_type == "")
-              @devices << Device.new(name: match[1], os_type: os_type, os_version: os_version, udid: match[2], state: match[3], is_simulator: true)
+            # "    iPad (5th generation) (852A5796-63C3-4641-9825-65EBDC5C4259) (Shutdown)"
+            # This line will turn the above string into
+            # ["iPad", "(5th generation)", "(852A5796-63C3-4641-9825-65EBDC5C4259)", "(Shutdown)"]
+            matches = line.strip.scan(/(.*?) (\(.*?\))/).flatten.reject(&:empty?)
+            state = matches.pop.to_s.delete('(').delete(')')
+            udid = matches.pop.to_s.delete('(').delete(')')
+            name = matches.join(' ')
+
+            if matches.count && (os_type == requested_os_type || requested_os_type == "")
+              @devices << Device.new(name: name, os_type: os_type, os_version: os_version, udid: udid, state: state, is_simulator: true)
             end
           end
         end
@@ -71,14 +71,8 @@ module FastlaneCore
 
         device_uuids = []
         result = Plist.parse_xml(usb_devices_output)
-        result[0]['_items'].each do |host_controller| # loop just incase the host system has more then 1 controller
-          host_controller['_items'].each do |usb_device|
-            is_supported_device = device_types.any? { |device_type| usb_device['_name'] == device_type }
-            if is_supported_device && usb_device['serial_num'].length == 40
-              device_uuids.push(usb_device['serial_num'])
-            end
-          end
-        end
+
+        discover_devices(result[0], device_types, device_uuids) if result[0]
 
         if device_uuids.count > 0 # instruments takes a little while to return so skip it if we have no devices
           instruments_devices_output = ''
@@ -98,6 +92,21 @@ module FastlaneCore
         end
 
         return devices
+      end
+
+      # Recursively handle all USB items, discovering devices that match the
+      # desired types.
+      def discover_devices(usb_item, device_types, discovered_device_udids)
+        (usb_item['_items'] || []).each do |child_item|
+          discover_devices(child_item, device_types, discovered_device_udids)
+        end
+
+        is_supported_device = device_types.any? { |device_type| usb_item['_name'] == device_type }
+        has_serial_number = (usb_item['serial_num'] || '').length == 40
+
+        if is_supported_device && has_serial_number
+          discovered_device_udids << usb_item['serial_num']
+        end
       end
 
       # The code below works from Xcode 7 on
@@ -208,7 +217,46 @@ module FastlaneCore
 
         UI.verbose "Launching #{simulator_path} for device: #{device.name} (#{device.udid})"
 
-        Helper.backticks("open -a #{simulator_path} --args -CurrentDeviceUDID #{device.udid}", print: $verbose)
+        Helper.backticks("open -a #{simulator_path} --args -CurrentDeviceUDID #{device.udid}", print: FastlaneCore::Globals.verbose?)
+      end
+
+      def copy_logs(device, log_identity, logs_destination_dir)
+        logs_destination_dir = File.expand_path(logs_destination_dir)
+        os_version = FastlaneCore::CommandExecutor.execute(command: 'sw_vers -productVersion', print_all: false, print_command: false)
+
+        host_computer_supports_logarchives = Gem::Version.new(os_version) >= Gem::Version.new('10.12.0')
+        device_supports_logarchives = Gem::Version.new(device.os_version) >= Gem::Version.new('10.0')
+
+        are_logarchives_supported = device_supports_logarchives && host_computer_supports_logarchives
+        if are_logarchives_supported
+          copy_logarchive(device, log_identity, logs_destination_dir)
+        else
+          copy_logfile(device, log_identity, logs_destination_dir)
+        end
+      end
+
+      private
+
+      def copy_logfile(device, log_identity, logs_destination_dir)
+        logfile_src = File.expand_path("~/Library/Logs/CoreSimulator/#{device.udid}/system.log")
+        return unless File.exist?(logfile_src)
+
+        FileUtils.mkdir_p(logs_destination_dir)
+        logfile_dst = File.join(logs_destination_dir, "system-#{log_identity}.log")
+
+        FileUtils.rm_f(logfile_dst)
+        FileUtils.cp(logfile_src, logfile_dst)
+        UI.success "Copying file '#{logfile_src}' to '#{logfile_dst}'..."
+      end
+
+      def copy_logarchive(device, log_identity, logs_destination_dir)
+        require 'shellwords'
+
+        logarchive_dst = Shellwords.escape(File.join(logs_destination_dir, "system_logs-#{log_identity}.logarchive"))
+        FileUtils.rm_rf(logarchive_dst)
+        FileUtils.mkdir_p(File.expand_path("..", logarchive_dst))
+        command = "xcrun simctl spawn #{device.udid} log collect --output #{logarchive_dst} 2>/dev/null"
+        FastlaneCore::CommandExecutor.execute(command: command, print_all: false, print_command: true)
       end
     end
   end

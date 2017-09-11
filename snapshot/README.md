@@ -18,8 +18,10 @@
   <a href="https://github.com/fastlane/boarding">boarding</a> &bull;
   <a href="https://github.com/fastlane/fastlane/tree/master/gym">gym</a> &bull;
   <a href="https://github.com/fastlane/fastlane/tree/master/scan">scan</a> &bull;
-  <a href="https://github.com/fastlane/fastlane/tree/master/match">match</a>
+  <a href="https://github.com/fastlane/fastlane/tree/master/match">match</a> &bull;
+  <a href="https://github.com/fastlane/fastlane/tree/master/precheck">precheck</a>
 </p>
+
 -------
 
 <p align="center">
@@ -31,7 +33,6 @@ snapshot
 
 [![Twitter: @FastlaneTools](https://img.shields.io/badge/contact-@FastlaneTools-blue.svg?style=flat)](https://twitter.com/FastlaneTools)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat)](https://github.com/fastlane/fastlane/blob/master/snapshot/LICENSE)
-[![Gem](https://img.shields.io/gem/v/snapshot.svg?style=flat)](http://rubygems.org/gems/snapshot)
 
 ###### Automate taking localized screenshots of your iOS and tvOS apps on every device
 
@@ -60,6 +61,7 @@ _snapshot_ runs completely in the background - you can do something else, while 
 Get in contact with the developer on Twitter: [@FastlaneTools](https://twitter.com/FastlaneTools)
 
 -------
+
 <p align="center">
     <a href="#features">Features</a> &bull;
     <a href="#installation">Installation</a> &bull;
@@ -77,13 +79,14 @@ Get in contact with the developer on Twitter: [@FastlaneTools](https://twitter.c
 
 # Features
 - Create hundreds of screenshots in multiple languages on all simulators
+- Take screenshots in multiple device simulators concurrently to cut down execution time (Xcode 9 only)
 - Configure it once, store the configuration in git
 - Do something else, while the computer takes the screenshots for you
 - Integrates with [`fastlane`](https://fastlane.tools) and [`deliver`](https://github.com/fastlane/fastlane/tree/master/deliver)
-- Generates a beautiful web page, which shows all screenshots on all devices. This is perfect to send to Q&A or the marketing team
+- Generates a beautiful web page, which shows all screenshots on all devices. This is perfect to send to QA or the marketing team
 - _snapshot_ automatically waits for network requests to be finished before taking a screenshot (we don't want loading images in the App Store screenshots)
 
-##### [Like this tool? Be the first to know about updates and new fastlane tools](https://tinyletter.com/krausefx)
+##### [Do you like fastlane? Be the first to know about updates and new fastlane tools](https://tinyletter.com/fastlane-tools)
 
 After _snapshot_ successfully created new screenshots, it will generate a beautiful HTML file to get a quick overview of all screens:
 
@@ -107,7 +110,7 @@ This tool automatically switches the language and device type and runs UI Tests 
 
 Install the gem
 
-    sudo gem install snapshot
+    sudo gem install fastlane
 
 Make sure, you have the latest version of the Xcode command line tools installed:
 
@@ -129,8 +132,9 @@ Here a few links to get started:
 # Quick Start
 
 - Create a new UI Test target in your Xcode project ([top part of this article](https://krausefx.com/blog/run-xcode-7-ui-tests-from-the-command-line))
-- Run `snapshot init` in your project folder
+- Run `fastlane snapshot init` in your project folder
 - Add the ./SnapshotHelper.swift to your UI Test target (You can move the file anywhere you want)
+ - **Note:** if you're using Xcode 8, add the ./SnapshotHelperXcode8.swift to your UI Test target
 - (Objective C only) add the bridging header to your test class.
  - `#import "MYUITests-Swift.h"`
  - The bridging header is named after your test target with -Swift.h appended.
@@ -154,6 +158,8 @@ XCUIApplication *app = [[XCUIApplication alloc] init];
 [app launch];
 ```
 
+_Make sure you only have one `launch` call in your test class, as Xcode adds one automatically on new test files._
+
 ![assets/snapshot.gif](assets/snapshot.gif)
 
 You can try the _snapshot_ [example project](https://github.com/fastlane/fastlane/tree/master/snapshot/example) by cloning this repo.
@@ -163,52 +169,56 @@ To quick start your UI tests, you can use the UI Test recorder. You only have to
 # Usage
 
 ```sh
-snapshot
+fastlane snapshot
 ```
 
 Your screenshots will be stored in the `./screenshots/` folder by default (or `./fastlane/screenshots` if you're using [fastlane](https://fastlane.tools))
 
+New with Xcode 9, *snapshot* can run multiple simulators concurrently. This is the default behavior in order to take your screenshots as quickly as possible. This can be disabled to run each device, one at a time, by setting the `:concurrent_simulators` option to `false`.
+
+**Note:** While running *snapshot* with Xcode 9, the simulators will not be visibly spawned. So, while you wont see the simulators running your tests, they will, in fact, be taking your screenshots.
+
 If any error occurs while running the snapshot script on a device, that device will not have any screenshots, and _snapshot_ will continue with the next device or language. To stop the flow after the first error, run
 
 ```sh
-snapshot --stop_after_first_error
+fastlane snapshot --stop_after_first_error
 ```
 
 Also by default, _snapshot_ will open the HTML after all is done. This can be skipped with the following command
 
 
 ```sh
-snapshot --stop_after_first_error --skip_open_summary
+fastlane snapshot --stop_after_first_error --skip_open_summary
 ```
 
 There are a lot of options available that define how to build your app, for example
 
 ```sh
-snapshot --scheme "UITests" --configuration "Release"  --sdk "iphonesimulator"
+fastlane snapshot --scheme "UITests" --configuration "Release"  --sdk "iphonesimulator"
 ```
 
 Reinstall the app before running _snapshot_
 
 ```sh
-snapshot --reinstall_app --app_identifier "tools.fastlane.app"
+fastlane snapshot --reinstall_app --app_identifier "tools.fastlane.app"
 ```
 
 By default _snapshot_ automatically retries running UI Tests if they fail. This is due to randomly failing UI Tests (e.g. [#372](https://github.com/fastlane/snapshot/issues/372)). You can adapt this number using
 
 ```sh
-snapshot --number_of_retries 3
+fastlane snapshot --number_of_retries 3
 ```
 
 Add photos and/or videos to the simulator before running _snapshot_
 
 ```sh
-snapshot --add_photos MyTestApp/Assets/demo.jpg --add_videos MyTestApp/Assets/demo.mp4
+fastlane snapshot --add_photos MyTestApp/Assets/demo.jpg --add_videos MyTestApp/Assets/demo.mp4
 ```
 
 For a list for all available options run
 
 ```sh
-snapshot --help
+fastlane snapshot --help
 ```
 
 After running _snapshot_ you will get a nice summary:
@@ -219,9 +229,9 @@ After running _snapshot_ you will get a nice summary:
 
 All of the available options can also be stored in a configuration file called the `Snapfile`. Since most values will not change often for your project, it is recommended to store them there:
 
-First make sure to have a `Snapfile` (you get it for free when running `snapshot init`)
+First make sure to have a `Snapfile` (you get it for free when running `fastlane snapshot init`)
 
-The `Snapfile` can contain all the options that are also available on `snapshot --help`
+The `Snapfile` can contain all the options that are also available on `fastlane snapshot --help`
 
 
 ```ruby
@@ -257,7 +267,7 @@ add_photos ["MyTestApp/Assets/demo.jpg"]
 You can run this command in the terminal to delete and re-create all iOS and tvOS simulators:
 
 ```
-snapshot reset_simulators
+fastlane snapshot reset_simulators
 ```
 
 **Warning**: This will delete **all** your simulators and replace by new ones! This is useful, if you run into weird problems when running _snapshot_.
@@ -271,14 +281,14 @@ Some updates require the helper files to be updated. _snapshot_ will automatical
 Basically you can run
 
 ```
-snapshot update
+fastlane snapshot update
 ```
 
 to update your `SnapshotHelper.swift` files. In case you modified your `SnapshotHelper.swift` and want to manually update the file, check out [SnapshotHelper.swift](https://github.com/fastlane/fastlane/blob/master/snapshot/lib/assets/SnapshotHelper.swift).
 
 ## Launch Arguments
 
-You can provide additional arguments to your app on launch. These strings will be available in your app (eg. not in the testing target) through `NSProcessInfo.processInfo().arguments`. Alternatively, use user-default syntax (`-key value`) and they will be available as key-value pairs in `NSUserDefaults.standardUserDefaults()`.
+You can provide additional arguments to your app on launch. These strings will be available in your app (eg. not in the testing target) through `ProcessInfo.processInfo.arguments`. Alternatively, use user-default syntax (`-key value`) and they will be available as key-value pairs in `UserDefaults.standard`.
 
 ```ruby
 launch_arguments([
@@ -287,14 +297,14 @@ launch_arguments([
 ```
 
 ```swift
-name.text = NSUserDefaults.standardUserDefaults().stringForKey("firstName")
+name.text = UserDefaults.standard.string(forKey: "firstName")
 // name.text = "Felix"
 ```
 
 _snapshot_ includes `-FASTLANE_SNAPSHOT YES`, which will set a temporary user default for the key `FASTLANE_SNAPSHOT`, you may use this to detect when the app is run by _snapshot_.
 
 ```swift
-if NSUserDefaults.standardUserDefaults().boolForKey("FASTLANE_SNAPSHOT") {
+if UserDefaults.standard.bool(forKey: "FASTLANE_SNAPSHOT") {
     // runtime check that we are in snapshot mode
 }
 ```
@@ -332,7 +342,7 @@ _snapshot_ finds all these entries using a regex. The number of _snapshot_ outpu
 
 If you find a better way to do any of this, please submit an issue on GitHub or even a pull request :+1:
 
-Also, feel free to duplicate radar [23062925](https://openradar.appspot.com/radar?id=5056366381105152).
+Radar [23062925](https://openradar.appspot.com/radar?id=5056366381105152) has been resolved with Xcode 8.3, so it's now possible to actually take screenshots from the simulator. We'll keep using the old approach for now, since many of you still want to use older versions of Xcode.
 
 # Tips
 
@@ -357,8 +367,9 @@ Also, feel free to duplicate radar [23062925](https://openradar.appspot.com/rada
 - [`gym`](https://github.com/fastlane/fastlane/tree/master/gym): Building your iOS apps has never been easier
 - [`scan`](https://github.com/fastlane/fastlane/tree/master/scan): The easiest way to run tests of your iOS and Mac app
 - [`match`](https://github.com/fastlane/fastlane/tree/master/match): Easily sync your certificates and profiles across your team using git
+- [`precheck`](https://github.com/fastlane/fastlane/tree/master/precheck): Check your app using a community driven set of App Store review rules to avoid being rejected
 
-##### [Like this tool? Be the first to know about updates and new fastlane tools](https://tinyletter.com/krausefx)
+##### [Do you like fastlane? Be the first to know about updates and new fastlane tools](https://tinyletter.com/fastlane-tools)
 
 ## Frame the screenshots
 
@@ -366,7 +377,7 @@ If you want to add frames around the screenshots and even put a title on top, ch
 
 ## Available language codes
 ```ruby
-ALL_LANGUAGES = ["da", "de-DE", "el", "en-AU", "en-CA", "en-GB", "en-US", "es-ES", "es-MX", "fi", "fr-CA", "fr-FR", "id", "it", "ja", "ko", "ms", "nl", "no", "pt-BR", "pt-PT", "ru", "sv", "th", "tr", "vi", "zh-Hans", "zh-Hant"]
+ALL_LANGUAGES = ["da", "de-DE", "el", "en-AU", "en-CA", "en-GB", "en-US", "es-ES", "es-MX", "fi", "fr-CA", "fr-FR", "id", "it", "ja", "ko", "ms", "nl-NL", "no", "pt-BR", "pt-PT", "ru", "sv", "th", "tr", "vi", "zh-Hans", "zh-Hant"]
 ```
 
 To get more information about language and locale codes please read [Internationalization and Localization Guide](https://developer.apple.com/library/ios/documentation/MacOSX/Conceptual/BPInternational/LanguageandLocaleIDs/LanguageandLocaleIDs.html).
@@ -389,7 +400,14 @@ When the app dies directly after the application is launched there might be 2 pr
 To detect the currently used localization in your tests, access the `deviceLanguage` variable from `SnapshotHelper.swift`.
 
 # Need help?
-Please submit an issue on GitHub and provide information about your setup
+
+Before submitting a new GitHub issue, please make sure to
+
+- Check out [docs.fastlane.tools](https://docs.fastlane.tools)
+- Check out the README pages on [this repo](https://github.com/fastlane/fastlane)
+- Search for [existing GitHub issues](https://github.com/fastlane/fastlane/issues)
+
+If the above doesn't help, please [submit an issue](https://github.com/fastlane/fastlane/issues) on GitHub and provide information about your setup, in particular the output of the `fastlane env` command.
 
 # Code of Conduct
 Help us keep _snapshot_ open and inclusive. Please read and follow our [Code of Conduct](https://github.com/fastlane/fastlane/blob/master/CODE_OF_CONDUCT.md).

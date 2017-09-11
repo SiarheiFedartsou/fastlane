@@ -6,6 +6,7 @@ module Fastlane
 
     class EnsureXcodeVersionAction < Action
       def self.run(params)
+        Actions.verify_gem!('xcode-install')
         required_version = params[:version]
         selected_version = sh("xcversion selected").match(/^Xcode (.*)$/)[1]
 
@@ -29,7 +30,7 @@ module Fastlane
 
       def self.details
         "If building your app requires a specific version of Xcode, you can invoke this command before using gym.\n
-        For example, to ensure that a beta version is not accidentally selected to build, which would make uploading to TestFlight fail."
+        For example, to ensure that a beta version of Xcode is not accidentally selected to build, which would make uploading to TestFlight fail."
       end
 
       def self.available_options

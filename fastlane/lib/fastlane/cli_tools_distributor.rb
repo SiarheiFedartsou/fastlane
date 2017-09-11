@@ -8,17 +8,27 @@ module Fastlane
         ARGV.include?('-v') || ARGV.include?('--version')
       end
 
+      def running_help_command?
+        ARGV.include?('-h') || ARGV.include?('--help')
+      end
+
       def take_off
         before_import_time = Time.now
 
         require "fastlane" # this might take a long time if there is no Gemfile :(
 
         # We want to avoid printing output other than the version number if we are running `fastlane -v`
-        if Time.now - before_import_time > 3 && !running_version_command?
-          print_slow_fastlane_warning
+        unless running_version_command?
+          print_bundle_exec_warning(is_slow: (Time.now - before_import_time > 3))
         end
 
+        FastlaneCore::UpdateChecker.start_looking_for_update('fastlane')
+
+        ARGV.unshift("spaceship") if ARGV.first == "spaceauth"
         tool_name = ARGV.first ? ARGV.first.downcase : nil
+
+        tool_name = process_emojis(tool_name)
+
         if tool_name && Fastlane::TOOLS.include?(tool_name.to_sym) && !available_lanes.include?(tool_name.to_sym)
           # Triggering a specific tool
           # This happens when the users uses things like
@@ -38,35 +48,53 @@ module Fastlane
             require File.join(tool_name, "commands_generator")
 
             # Call the tool's CommandsGenerator class and let it do its thing
-            Object.const_get(tool_name.fastlane_module)::CommandsGenerator.start
+            commands_generator = Object.const_get(tool_name.fastlane_module)::CommandsGenerator
           rescue LoadError
             # This will only happen if the tool we call here, doesn't provide
             # a CommandsGenerator class yet
             # When we launch this feature, this should never be the case
             abort("#{tool_name} can't be called via `fastlane #{tool_name}`, run '#{tool_name}' directly instead".red)
           end
+          commands_generator.start
+        elsif tool_name == "fastlane-credentials"
+          require 'credentials_manager'
+          ARGV.shift
+          CredentialsManager::CLI.new.run
         else
           # Triggering fastlane to call a lane
           require "fastlane/commands_generator"
           Fastlane::CommandsGenerator.start
         end
+      ensure
+        FastlaneCore::UpdateChecker.show_update_status('fastlane', Fastlane::VERSION)
       end
 
-      def print_slow_fastlane_warning
-        # `BUNDLE_BIN_PATH` is used when the user uses `bundle exec`
-        return if ENV['BUNDLE_BIN_PATH'] || ENV['SKIP_SLOW_FASTLANE_WARNING'] || FastlaneCore::Helper.contained_fastlane?
+      # Since fastlane also supports the rocket and biceps emoji as executable
+      # we need to map those to the appropriate tools
+      def process_emojis(tool_name)
+        return {
+          "🚀" => "fastlane",
+          "💪" => "gym"
+        }[tool_name] || tool_name
+      end
+
+      def print_bundle_exec_warning(is_slow: false)
+        return if FastlaneCore::Helper.bundler? # user is alread using bundler
+        return if FastlaneCore::Env.truthy?('SKIP_SLOW_FASTLANE_WARNING') # user disabled the warnings
+        return if FastlaneCore::Helper.contained_fastlane? # user uses the bundled fastlane
 
         gemfile_path = PluginManager.new.gemfile_path
         if gemfile_path
-          # The user has a Gemfile, but fastlane is still slow
+          # The user has a Gemfile, but forgot to use `bundle exec`
           # Let's tell the user how to use `bundle exec`
-          UI.important "Seems like launching fastlane takes a while"
-          UI.important "fastlane detected a Gemfile in this directory"
+          # We show this warning no matter if the command is slow or not
+          UI.important "fastlane detected a Gemfile in the current directory"
           UI.important "however it seems like you don't use `bundle exec`"
           UI.important "to launch fastlane faster, please use"
           UI.message ""
           UI.command "bundle exec fastlane #{ARGV.join(' ')}"
-        else
+          UI.message ""
+        elsif is_slow
           # fastlane is slow and there is no Gemfile
           # Let's tell the user how to use `gem cleanup` and how to
           # start using a Gemfile
@@ -84,9 +112,9 @@ module Fastlane
           UI.message ""
           UI.important "After creating the Gemfile and Gemfile.lock, commit those files into version control"
         end
-        UI.important "For more information, check out https://guides.cocoapods.org/using/a-gemfile.html"
+        UI.important "Get started using a Gemfile for fastlane https://docs.fastlane.tools/getting-started/ios/setup/#use-a-gemfile"
 
-        sleep 1
+        sleep 2 # napping is life, otherwise the user might not see this message
       end
 
       # Returns an array of symbols for the available lanes for the Fastfile

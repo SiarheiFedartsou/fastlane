@@ -22,25 +22,30 @@ module Supply
 
     # instantiate a client given the supplied configuration
     def self.make_from_config
-      unless Supply.config[:json_key] || (Supply.config[:key] && Supply.config[:issuer])
+      unless Supply.config[:json_key] || Supply.config[:json_key_data] || (Supply.config[:key] && Supply.config[:issuer])
         UI.important("To not be asked about this value, you can specify it using 'json_key'")
         Supply.config[:json_key] = UI.input("The service account json file used to authenticate with Google: ")
       end
 
+      if Supply.config[:json_key]
+        service_account_json = File.open(File.expand_path(Supply.config[:json_key]))
+      elsif Supply.config[:json_key_data]
+        service_account_json = StringIO.new(Supply.config[:json_key_data])
+      end
+
       return Client.new(path_to_key: Supply.config[:key],
-                        issuer: Supply.config[:issuer],
-                        path_to_service_account_json: Supply.config[:json_key])
+                        issuer: Supply.config[:issuer], service_account_json: service_account_json)
     end
 
     # Initializes the android_publisher and its auth_client using the specified information
-    # @param path_to_service_account_json: The path to your service account Json file
+    # @param service_account_json: The raw service account Json data
     # @param path_to_key: The path to your p12 file (@deprecated)
-    # @param issuer: Email addresss for oauth (@deprecated)
-    def initialize(path_to_key: nil, issuer: nil, path_to_service_account_json: nil)
+    # @param issuer: Email address for oauth (@deprecated)
+    def initialize(path_to_key: nil, issuer: nil, service_account_json: nil)
       scope = Androidpublisher::AUTH_ANDROIDPUBLISHER
 
-      if path_to_service_account_json
-        key_io = File.open(File.expand_path(path_to_service_account_json))
+      if service_account_json
+        key_io = service_account_json
       else
         require 'google/api_client/auth/key_utils'
         key = Google::APIClient::KeyUtils.load_from_pkcs12(File.expand_path(path_to_key), 'notasecret')
@@ -57,18 +62,23 @@ module Supply
 
       auth_client.fetch_access_token!
 
-      if ENV["DEBUG"]
+      if FastlaneCore::Env.truthy?("DEBUG")
         Google::Apis.logger.level = Logger::DEBUG
       end
 
       Google::Apis::ClientOptions.default.application_name = "fastlane - supply"
-      Google::Apis::ClientOptions.default.application_version = Supply::VERSION
-      Google::Apis::RequestOptions.default.timeout_sec = 300
-      Google::Apis::RequestOptions.default.open_timeout_sec = 300
+      Google::Apis::ClientOptions.default.application_version = Fastlane::VERSION
+      Google::Apis::ClientOptions.default.read_timeout_sec = 300
+      Google::Apis::ClientOptions.default.open_timeout_sec = 300
       Google::Apis::RequestOptions.default.retries = 5
 
       self.android_publisher = Androidpublisher::AndroidPublisherService.new
       self.android_publisher.authorization = auth_client
+      if Supply.config[:root_url]
+        # Google's client expects the root_url string to end with "/".
+        Supply.config[:root_url] << '/' unless Supply.config[:root_url].end_with?('/')
+        self.android_publisher.root_url = Supply.config[:root_url]
+      end
     end
 
     #####################################################
@@ -211,6 +221,21 @@ module Supply
       return result_upload.version_code
     end
 
+    def upload_mapping(path_to_mapping, apk_version_code)
+      ensure_active_edit!
+
+      call_google_api do
+        android_publisher.upload_edit_deobfuscationfile(
+          current_package_name,
+          current_edit.id,
+          apk_version_code,
+          "proguard",
+          upload_source: path_to_mapping,
+          content_type: "application/octet-stream"
+        )
+      end
+    end
+
     # Updates the track for the provided version code(s)
     def update_track(track, rollout, apk_version_code)
       ensure_active_edit!
@@ -237,15 +262,17 @@ module Supply
     def track_version_codes(track)
       ensure_active_edit!
 
-      result = call_google_api do
-        android_publisher.get_track(
+      begin
+        result = android_publisher.get_track(
           current_package_name,
           current_edit.id,
           track
         )
+        return result.version_codes
+      rescue Google::Apis::ClientError => e
+        return [] if e.status_code == 404 && e.to_s.include?("trackEmpty")
+        raise
       end
-
-      return result.version_codes
     end
 
     def update_apk_listing_for_language(apk_listing)

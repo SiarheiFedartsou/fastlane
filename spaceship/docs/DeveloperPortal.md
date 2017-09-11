@@ -64,6 +64,9 @@ Examples:
 # Find a specific app based on the bundle identifier
 app = Spaceship::Portal.app.find("com.krausefx.app")
 
+# Get detail informations (e.g. see all enabled app services)
+app.details
+
 # Enable HealthKit, but make sure HomeKit is disabled
 app.update_service(Spaceship::Portal.app_service.health_kit.on)
 app.update_service(Spaceship::Portal.app_service.home_kit.off)
@@ -93,6 +96,48 @@ group = Spaceship::Portal.app_group.create!(group_id: "group.com.example.another
 # Associate an app with this group (overwrites any previous associations)
 # Assumes app contains a fetched app, as described above
 app = app.associate_groups([group])
+```
+
+## Apple Pay Merchants
+
+```ruby
+# Fetch all existing merchants
+all_merchants = Spaceship::Portal.merchant.all
+
+# Find a specific merchant, based on the identifier
+sandbox_merchant = Spaceship::Portal.merchant.find("merchant.com.example.application.sandbox")
+
+# Show the names of all the merchants
+Spaceship::Portal.merchant.all.collect do |merchant|
+  merchant.name
+end
+
+# Create a new merchant
+another_merchant = Spaceship::Portal.merchant.create!(bundle_id: "merchant.com.example.another", name: "Another merchant")
+
+# Delete a merchant
+another_merchant.delete!
+
+# Associate an app with merchant/s (overwrites any previous associations)
+# Assumes app contains a fetched app, as described above
+app = app.associate_merchants([sandbox_merchant, production_merchant])
+```
+
+## Passbook
+
+```ruby
+# Fetch all existing passbooks
+all_passbooks = Spaceship::Portal.passbook.all
+
+# Find a specific passbook, based on the identifier
+passbook = Spaceship::Portal.passbook.find("pass.com.example.passbook")
+
+# Create a new passbook
+passbook = Spaceship::Portal.passbook.create!(bundle_id: 'pass.com.example.passbook', name: 'Fastlane Passbook')
+
+# Delete a passbook using his identifier
+passbook = Spaceship::Portal.passbook.find("pass.com.example.passbook").delete!
+
 ```
 
 ## Certificates
@@ -170,7 +215,7 @@ end
 # Get all Development profiles
 profiles_dev = Spaceship::Portal.provisioning_profile.development.all
 
-# Fetch all profiles for a specific app identifier for the App Store
+# Fetch all profiles for a specific app identifier for the App Store (Array of profiles)
 filtered_profiles = Spaceship::Portal.provisioning_profile.app_store.find_by_bundle_id("com.krausefx.app")
 
 # Check if a provisioning profile is valid
@@ -185,8 +230,10 @@ profile.certificate_valid?
 profile_content = profiles.first.download
 
 # Download a specific profile as file
-my_profile = Spaceship::Portal.provisioning_profile.app_store.find_by_bundle_id("com.krausefx.app")
-File.write("output.mobileprovision", my_profile.download)
+matching_profiles = Spaceship::Portal.provisioning_profile.app_store.find_by_bundle_id("com.krausefx.app")
+first_profile = matching_profiles.first
+
+File.write("output.mobileprovision", first_profile.download)
 ```
 
 ### Create a Provisioning Profile
@@ -298,9 +345,13 @@ profile.update!
 # Get the currently used team_id
 Spaceship::Portal.client.team_id
 
+app = Spaceship::Portal.app.find("com.krausefx.app")
+
+# Update app name
+app.update_name!('New App Name')
+
 # We generally don't want to be destructive, but you can also delete things
 # This method might fail for various reasons, e.g. app is already in the store
-app = Spaceship::Portal.app.find("com.krausefx.app")
 app.delete!
 ```
 

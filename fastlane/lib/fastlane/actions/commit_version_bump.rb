@@ -40,7 +40,6 @@ module Fastlane
         pbxproj_path = pbxproj_pathname.relative_path_from(repo_pathname).to_s
 
         # find the info_plist files
-        # rubocop:disable Style/MultilineBlockChain
         project = Xcodeproj::Project.open(xcodeproj_path)
         info_plist_files = project.objects.select do |object|
           object.isa == 'XCBuildConfiguration'
@@ -53,13 +52,12 @@ module Fastlane
         end.uniq.map do |info_plist_path|
           Pathname.new(File.expand_path(File.join(xcodeproj_path, '..', info_plist_path))).relative_path_from(repo_pathname).to_s
         end
-        # rubocop:enable Style/MultilineBlockChain
 
         # Removes .plist files that matched the given expression in the 'ignore' parameter
         ignore_expression = params[:ignore]
         if ignore_expression
-          info_plist_files.select! do |info_plist_file|
-            !info_plist_file.match(ignore_expression)
+          info_plist_files.reject! do |info_plist_file|
+            info_plist_file.match(ignore_expression)
           end
         end
 
@@ -67,6 +65,14 @@ module Fastlane
         expected_changed_files = []
         expected_changed_files << pbxproj_path
         expected_changed_files << info_plist_files
+
+        if params[:settings]
+          settings_plists_from_param(params[:settings]).each do |file|
+            settings_file_pathname = Pathname.new settings_bundle_file_path(project, file)
+            expected_changed_files << settings_file_pathname.relative_path_from(repo_pathname).to_s
+          end
+        end
+
         expected_changed_files.flatten!.uniq!
 
         # get the list of files that have actually changed in our git workdir
@@ -80,7 +86,7 @@ module Fastlane
         unless changed_files_as_expected
           unless params[:force]
             error = [
-              "Found unexpected uncommited changes in the working directory. Expected these files to have ",
+              "Found unexpected uncommitted changes in the working directory. Expected these files to have ",
               "changed: \n#{expected_changed_files.join("\n")}.\nBut found these actual changes: ",
               "#{git_dirty_files.join("\n")}.\nMake sure you have cleaned up the build artifacts and ",
               "are only left with the changed version files at this stage in your lane, and don't touch the ",
@@ -89,10 +95,6 @@ module Fastlane
             ].join("\n")
             UI.user_error!(error)
           end
-        end
-
-        if params[:settings]
-          expected_changed_files << 'Settings.bundle/Root.plist'
         end
 
         # get the absolute paths to the files
@@ -186,12 +188,43 @@ module Fastlane
           'commit_version_bump(
             message: "Version Bump",                    # create a commit with a custom message
             xcodeproj: "./path/to/MyProject.xcodeproj", # optional, if you have multiple Xcode project files, you must specify your main project here
+          )',
+          'commit_version_bump(
+            settings: true # Include Settings.bundle/Root.plist
+          )',
+          'commit_version_bump(
+            settings: "About.plist" # Include Settings.bundle/About.plist
+          )',
+          'commit_version_bump(
+            settings: %w[About.plist Root.plist] # Include more than one plist from Settings.bundle
           )'
         ]
       end
 
       def self.category
         :source_control
+      end
+
+      class << self
+        def settings_plists_from_param(param)
+          if param.kind_of? String
+            # commit_version_bump xcodeproj: "MyProject.xcodeproj", settings: "About.plist"
+            return [param]
+          elsif param.kind_of? Array
+            # commit_version_bump xcodeproj: "MyProject.xcodeproj", settings: [ "Root.plist", "About.plist" ]
+            return param
+          end
+
+          # commit_version_bump xcodeproj: "MyProject.xcodeproj", settings: true # Root.plist
+          ["Root.plist"]
+        end
+
+        def settings_bundle_file_path(project, settings_file_name)
+          settings_bundle = project.files.find { |f| f.path =~ /Settings.bundle/ }
+          raise "No Settings.bundle in project" if settings_bundle.nil?
+
+          File.join(settings_bundle.real_path, settings_file_name)
+        end
       end
     end
   end

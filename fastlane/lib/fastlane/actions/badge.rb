@@ -2,8 +2,10 @@ module Fastlane
   module Actions
     class BadgeAction < Action
       def self.run(params)
+        UI.important('The badge action has been deprecated,')
+        UI.important('please checkout the badge plugin here:')
+        UI.important('https://github.com/HazAT/fastlane-plugin-badge')
         Actions.verify_gem!('badge')
-        check_imagemagick!
         require 'badge'
         options = {
           dark: params[:dark],
@@ -17,7 +19,13 @@ module Fastlane
           shield_gravity: params[:shield_gravity],
           shield_no_resize: params[:shield_no_resize]
         }
-        Badge::Runner.new.run(params[:path], options)
+        begin
+          Badge::Runner.new.run(params[:path], options)
+        rescue => e
+          # We want to catch this error and raise our own so that we are not counting this as a crash in our metrics
+          UI.verbose(e.backtrace.join("\n"))
+          UI.user_error!("Something went wrong while running badge: #{e}")
+        end
       end
 
       #####################################################
@@ -47,7 +55,7 @@ module Fastlane
       end
 
       def self.category
-        :misc
+        :deprecated
       end
 
       def self.available_options
@@ -77,7 +85,7 @@ module Fastlane
                                        end),
           FastlaneCore::ConfigItem.new(key: :shield,
                                        env_name: "FL_BADGE_SHIELD",
-                                       description: "Add a shield to your app icon from shield.io",
+                                       description: "Add a shield to your app icon from shields.io",
                                        optional: true,
                                        is_string: true),
           FastlaneCore::ConfigItem.new(key: :alpha,
@@ -99,7 +107,7 @@ module Fastlane
                                        end),
           FastlaneCore::ConfigItem.new(key: :shield_io_timeout,
                                        env_name: "FL_BADGE_SHIELD_IO_TIMEOUT",
-                                       description: "Set custom duration for the timeout of the shield.io request in seconds",
+                                       description: "Set custom duration for the timeout of the shields.io request in seconds",
                                        optional: true,
                                        is_string: false,
                                        verify_block: proc do |value|
@@ -125,7 +133,7 @@ module Fastlane
                                        is_string: true),
           FastlaneCore::ConfigItem.new(key: :shield_no_resize,
                                        env_name: "FL_BADGE_SHIELD_NO_RESIZE",
-                                       description: "Shield image will no longer be resized to aspect fill the full icon. Instead it will only be shrinked to not exceed the icon graphic",
+                                       description: "Shield image will no longer be resized to aspect fill the full icon. Instead it will only be shrunk to not exceed the icon graphic",
                                        optional: true,
                                        is_string: false,
                                        verify_block: proc do |value|
@@ -141,20 +149,6 @@ module Fastlane
       def self.is_supported?(platform)
         [:ios, :mac, :android].include?(platform)
       end
-
-      def self.check_imagemagick!
-        return if `which convert`.include?('convert')
-
-        UI.error("You have to install ImageMagick to use `badge`")
-        UI.error("")
-        UI.error("Install it using:")
-        UI.command("brew update && brew install imagemagick")
-        UI.error("")
-        UI.error("If you don't have homebrew, visit http://brew.sh")
-
-        UI.user_error!("Install ImageMagick and start your lane again!")
-      end
-      private_class_method :check_imagemagick!
     end
   end
 end

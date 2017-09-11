@@ -1,13 +1,11 @@
-require 'spec_helper'
 require "fastlane/environment_printer"
 require "fastlane/cli_tools_distributor"
 
 describe Fastlane do
   describe Fastlane::EnvironmentPrinter do
     before do
-      stub_request(:post, %r{https:\/\/fastlane-refresher.herokuapp.com\/.*}).
-        with(headers: { 'Host' => 'fastlane-refresher.herokuapp.com:443' }).
-        to_return(status: 200, body: '{"version": "0.16.2",  "status": "ok"}', headers: {})
+      stub_request(:get, %r{https:\/\/rubygems.org\/api\/v1\/gems\/.*}).
+        to_return(status: 200, body: '{"version": "0.16.2"}', headers: {})
     end
 
     let(:env) { Fastlane::EnvironmentPrinter.get }
@@ -19,7 +17,6 @@ describe Fastlane do
 
     it "prints out the loaded fastlane plugins" do
       expect(env).to include("Loaded fastlane plugins")
-      expect(env).to include("fastlane-plugin-ruby")
     end
 
     it "prints out the loaded gem dependencies" do
@@ -40,6 +37,19 @@ describe Fastlane do
       expect(Fastlane::EnvironmentPrinter.anonymized_path('/Users/john', '/Users/john')).to eq('~')
       expect(Fastlane::EnvironmentPrinter.anonymized_path('/Users/john/', '/Users/john')).to eq('~/')
       expect(Fastlane::EnvironmentPrinter.anonymized_path('/workspace/project/test', '/work')).to eq('/workspace/project/test')
+    end
+
+    context 'FastlaneCore::Helper.xcode_version cannot be obtained' do
+      before do
+        allow(FastlaneCore::Helper).to receive(:xcode_version).and_raise("Boom!")
+      end
+
+      it 'contains stack information other than Xcode Version' do
+        expect(env).to include("Bundler?")
+        expect(env).to include("Xcode Path")
+        expect(env).not_to include("Xcode Version")
+        expect(env).to include("OpenSSL")
+      end
     end
   end
 end

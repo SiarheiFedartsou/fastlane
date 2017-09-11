@@ -9,6 +9,8 @@ module Scan
       # First, try loading the Scanfile from the current directory
       config.load_configuration_file(Scan.scanfile_name)
 
+      prevalidate
+
       # Detect the project
       FastlaneCore::Project.detect_projects(config)
       Scan.project = FastlaneCore::Project.new(config)
@@ -36,7 +38,30 @@ module Scan
 
       default_derived_data
 
+      coerce_to_array_of_strings(:only_testing)
+      coerce_to_array_of_strings(:skip_testing)
+
       return config
+    end
+
+    def self.prevalidate
+      output_types = Scan.config[:output_types]
+      has_multiple_report_types = output_types && output_types.split(',').size > 1
+      if has_multiple_report_types && Scan.config[:custom_report_file_name]
+        UI.user_error!("Using a :custom_report_file_name with multiple :output_types (#{output_types}) will lead to unexpected results. Use :output_files instead.")
+      end
+    end
+
+    def self.coerce_to_array_of_strings(config_key)
+      config_value = Scan.config[config_key]
+
+      return if config_value.nil?
+
+      # splitting on comma allows us to support comma-separated lists of values
+      # from the command line, even though the ConfigItem is not defined as an
+      # Array type
+      config_value = config_value.split(',') unless config_value.kind_of?(Array)
+      Scan.config[config_key] = config_value.map(&:to_s)
     end
 
     def self.default_derived_data
@@ -121,9 +146,11 @@ module Scan
             else # pieces.count == 2 -- mathematically, because of the 'end of line' part of our regular expression
               version = pieces[1].tr('()', '')
               potential_emptiness_error = lambda do |sims|
-                UI.error("No simulators found that are equal to the version " \
-                "of specifier (#{version}) and greater than or equal to the version " \
-                "of deployment target (#{deployment_target_version})") if sims.empty?
+                if sims.empty?
+                  UI.error("No simulators found that are equal to the version " \
+                  "of specifier (#{version}) and greater than or equal to the version " \
+                  "of deployment target (#{deployment_target_version})")
+                end
               end
               filter_simulators(simulators, :equal, version).tap(&potential_emptiness_error).select(&selector)
             end
@@ -136,7 +163,7 @@ module Scan
       end
 
       default = lambda do
-        UI.error("Couldn't find any matching simulators for '#{devices}' - falling back to default simulator")
+        UI.error("Couldn't find any matching simulators for '#{devices}' - falling back to default simulator") if (devices || []).count > 0
 
         result = Array(
           simulators
@@ -146,7 +173,7 @@ module Scan
             .last || simulators.first
         )
 
-        UI.error("Found simulator \"#{result.first.name} (#{result.first.os_version})\"") if result.first
+        UI.message("Found simulator \"#{result.first.name} (#{result.first.os_version})\"") if result.first
 
         result
       end
@@ -159,13 +186,13 @@ module Scan
     end
 
     def self.min_xcode8?
-      Helper.xcode_version.split(".").first.to_i >= 8
+      Helper.xcode_at_least?("8.0")
     end
 
     def self.detect_destination
       if Scan.config[:destination]
         UI.important("It's not recommended to set the `destination` value directly")
-        UI.important("Instead use the other options available in `scan --help`")
+        UI.important("Instead use the other options available in `fastlane scan --help`")
         UI.important("Using your value '#{Scan.config[:destination]}' for now")
         UI.important("because I trust you know what you're doing...")
         return

@@ -55,6 +55,9 @@ module Spaceship
       # @return [Integer] The version number of the last installed build
       attr_accessor :latest_installed_version_number
 
+      # @return [String] The full version of the last installed build
+      attr_accessor :latest_build
+
       attr_mapping(
         'testerId' => :tester_id,
         'emailAddress.value' => :email,
@@ -63,21 +66,16 @@ module Spaceship
         'groups' => :groups,
         'devices' => :devices,
         'latestInstalledAppAdamId' => :latest_install_app_id,
-        'latestInstalledDate' => :latest_install_date,
-        'latestInstalledVersion' => :latest_installed_version_number,
-        'latestInstalledShortVersion' => :latest_installed_build_number
+        'latestInstallByPlatform.ios.installDate' => :latest_install_date,
+        'latestInstallByPlatform.ios.shortVersion' => :latest_installed_version_number,
+        'latestInstallByPlatform.ios.version' => :latest_installed_build_number,
+        'latestBuild' => :latest_build
       )
 
       class << self
         # @return (Hash) All urls for the ITC used for web requests
         def url
           raise "You have to use a subclass: Internal or External"
-        end
-
-        # Create a new object based on a hash.
-        # This is used to create a new object based on the server response.
-        def factory(attrs)
-          self.new(attrs)
         end
 
         # @return (Array) Returns all beta testers available for this account
@@ -104,15 +102,17 @@ module Spaceship
         # @param last_name (String) (optional): The last name of the new tester
         # @param groups (Array) (option): Names/IDs of existing groups for the new tester
         # @example
-        #   Spaceship::Tunes::Tester.external.create!(email: "tester@mathiascarignani.com", first_name: "Cary", last_name:"Bennett", groups:["Testers"])
+        #   Spaceship::Tunes::Tester.external.create!(email: "tester@mathiascarignani.com", first_name: "Cary", last_name: "Bennett", groups: ["Testers"])
         # @return (Tester): The newly created tester
         def create!(email: nil, first_name: nil, last_name: nil, groups: nil)
-          data = client.create_tester!(tester: self,
-                                        email: email,
-                                   first_name: first_name,
-                                    last_name: last_name,
-                                       groups: groups)
-          self.factory(data)
+          client.create_tester!(tester: self,
+                                 email: email,
+                            first_name: first_name,
+                             last_name: last_name,
+                                groups: groups)
+          # The response of the client request is a hash but doesn't contain all of the necessary data (like testerId, etc)
+          # use #find to get an instance of Tester with all of the data.
+          find(email)
         end
 
         #####################################################
@@ -196,13 +196,13 @@ module Spaceship
       # Add current tester to list of the app testers
       # @param app_id (String) (required): The id of the application to which want to modify the list
       def add_to_app!(app_id)
-        client.add_tester_to_app!(self, app_id)
+        raise "`[tester].add_to_app!` got removed from spaceship as the TestFlight API changed, please use `app.default_external_group.add_tester!(tester)` instead"
       end
 
       # Remove current tester from list of the app testers
       # @param app_id (String) (required): The id of the application to which want to modify the list
       def remove_from_app!(app_id)
-        client.remove_tester_from_app!(self, app_id)
+        raise "`[tester].remove_from_app!` got removed from spaceship as the TestFlight API changed, please use `app.default_external_group.remove_tester!(tester)` instead"
       end
 
       #####################################################

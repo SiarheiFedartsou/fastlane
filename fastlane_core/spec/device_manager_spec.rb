@@ -3,9 +3,11 @@ require 'open3'
 describe FastlaneCore do
   describe FastlaneCore::DeviceManager do
     before(:all) do
-      @simctl_output = File.read('./spec/fixtures/DeviceManagerSimctlOutputXcode7')
-      @system_profiler_output = File.read('./spec/fixtures/DeviceManagerSystem_profilerOutput')
-      @instruments_output = File.read('./spec/fixtures/DeviceManagerInstrumentsOutput')
+      @simctl_output = File.read('./fastlane_core/spec/fixtures/DeviceManagerSimctlOutputXcode7')
+      @system_profiler_output = File.read('./fastlane_core/spec/fixtures/DeviceManagerSystem_profilerOutput')
+      @instruments_output = File.read('./fastlane_core/spec/fixtures/DeviceManagerInstrumentsOutput')
+      @system_profiler_output_items_without_items = File.read('./fastlane_core/spec/fixtures/DeviceManagerSystem_profilerOutputItemsWithoutItems')
+      @system_profiler_output_usb_hub = File.read('./fastlane_core/spec/fixtures/DeviceManagerSystem_profilerOutputUsbHub')
 
       FastlaneCore::Simulator.clear_cache
     end
@@ -69,7 +71,7 @@ describe FastlaneCore do
 
       it "Xcode 8" do
         response = "response"
-        simctl_output = File.read('./spec/fixtures/DeviceManagerSimctlOutputXcode8')
+        simctl_output = File.read('./fastlane_core/spec/fixtures/DeviceManagerSimctlOutputXcode8')
         expect(response).to receive(:read).and_return(simctl_output)
         expect(Open3).to receive(:popen3).with("xcrun simctl list devices").and_yield(nil, response, nil, nil)
 
@@ -83,14 +85,43 @@ describe FastlaneCore do
           is_simulator: true
         )
         expect(devices[-2]).to have_attributes(
-          name: "iPad Pro (9.7 inch)", os_type: "iOS", os_version: "10.0",
+          name: "iPad Pro (9.7-inch)", os_type: "iOS", os_version: "10.0",
           udid: "C03658EC-1362-4D8D-A40A-45B1D7D5405E",
           state: "Shutdown",
           is_simulator: true
         )
         expect(devices[-1]).to have_attributes(
-          name: "iPad Pro (12.9 inch)", os_type: "iOS", os_version: "10.0",
+          name: "iPad Pro (12.9-inch)", os_type: "iOS", os_version: "10.0",
           udid: "CEF11EB3-79DF-43CB-896A-0F33916C8BDE",
+          state: "Shutdown",
+          is_simulator: true
+        )
+      end
+
+      it 'Xcode 9' do
+        response = "response"
+        simctl_output = File.read('./fastlane_core/spec/fixtures/DeviceManagerSimctlOutputXcode9')
+        expect(response).to receive(:read).and_return(simctl_output)
+        expect(Open3).to receive(:popen3).with("xcrun simctl list devices").and_yield(nil, response, nil, nil)
+
+        devices = FastlaneCore::Simulator.all
+        expect(devices.count).to eq(15)
+
+        expect(devices[-3]).to have_attributes(
+          name: "iPad Pro (12.9-inch)", os_type: "iOS", os_version: "11.0",
+          udid: "C7C55339-DE8F-4DA3-B94A-09879CB1E5B5",
+          state: "Shutdown",
+          is_simulator: true
+        )
+        expect(devices[-2]).to have_attributes(
+          name: "iPad Pro (12.9-inch) (2nd generation)", os_type: "iOS", os_version: "11.0",
+          udid: "D2408DE5-C74F-4AD1-93FA-CC083D438321",
+          state: "Shutdown",
+          is_simulator: true
+        )
+        expect(devices[-1]).to have_attributes(
+          name: "iPad Pro (10.5-inch)", os_type: "iOS", os_version: "11.0",
+          udid: "ED8B6B96-11CC-4848-93B8-4D5D627ABF7E",
           state: "Shutdown",
           is_simulator: true
         )
@@ -187,7 +218,7 @@ describe FastlaneCore do
       )
     end
 
-    it "property parses system_profiler and instruments output and generates Device objects for iOS" do
+    it "properly parses system_profiler and instruments output and generates Device objects for iOS" do
       response = "response"
       expect(response).to receive(:read).and_return(@system_profiler_output)
       expect(Open3).to receive(:popen3).with("system_profiler SPUSBDataType -xml").and_yield(nil, response, nil, nil)
@@ -206,7 +237,34 @@ describe FastlaneCore do
       )
     end
 
-    it "property parses system_profiler and instruments output and generates Device objects for tvOS" do
+    it "properly parses system_profiler output with entries that don't contain _items" do
+      response = "response"
+      expect(response).to receive(:read).and_return(@system_profiler_output_items_without_items)
+      expect(Open3).to receive(:popen3).with("system_profiler SPUSBDataType -xml").and_yield(nil, response, nil, nil)
+
+      devices = FastlaneCore::DeviceManager.connected_devices('iOS')
+      expect(devices).to be_empty
+    end
+
+    it "properly finds devices in system_profiler output when connected via USB hubs" do
+      response = "response"
+      expect(response).to receive(:read).and_return(@system_profiler_output_usb_hub)
+      expect(Open3).to receive(:popen3).with("system_profiler SPUSBDataType -xml").and_yield(nil, response, nil, nil)
+
+      expect(response).to receive(:read).and_return(@instruments_output)
+      expect(Open3).to receive(:popen3).with("instruments -s devices").and_yield(nil, response, nil, nil)
+
+      devices = FastlaneCore::DeviceManager.connected_devices('iOS')
+      expect(devices.count).to eq(1)
+      expect(devices[0]).to have_attributes(
+        name: "Matthew's iPhone", os_type: "iOS", os_version: "9.3",
+        udid: "f0f9f44e7c2dafbae53d1a83fe27c37418ffffff",
+        state: "Booted",
+        is_simulator: false
+      )
+    end
+
+    it "properly parses system_profiler and instruments output and generates Device objects for tvOS" do
       response = "response"
       expect(response).to receive(:read).and_return(@system_profiler_output)
       expect(Open3).to receive(:popen3).with("system_profiler SPUSBDataType -xml").and_yield(nil, response, nil, nil)
@@ -225,7 +283,7 @@ describe FastlaneCore do
       )
     end
 
-    it "property parses output for all iOS devices" do
+    it "properly parses output for all iOS devices" do
       response = "response"
       expect(response).to receive(:read).and_return(@system_profiler_output)
       expect(Open3).to receive(:popen3).with("system_profiler SPUSBDataType -xml").and_yield(nil, response, nil, nil)
@@ -271,7 +329,7 @@ describe FastlaneCore do
       )
     end
 
-    it "property parses output for all tvOS devices" do
+    it "properly parses output for all tvOS devices" do
       response = "response"
       expect(response).to receive(:read).and_return(@system_profiler_output)
       expect(Open3).to receive(:popen3).with("system_profiler SPUSBDataType -xml").and_yield(nil, response, nil, nil)

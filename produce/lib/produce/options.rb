@@ -22,7 +22,7 @@ module Produce
                                      short_option: "-e",
                                      env_name: "PRODUCE_APP_IDENTIFIER_SUFFIX",
                                      optional: true,
-                                     description: "App Identifier Suffix (Ignored if App Identifier does not ends with .*)"),
+                                     description: "App Identifier Suffix (Ignored if App Identifier does not end with .*)"),
         FastlaneCore::ConfigItem.new(key: :app_name,
                                      env_name: "PRODUCE_APP_NAME",
                                      short_option: "-q",
@@ -65,6 +65,42 @@ module Produce
                                      description: "Skip the creation of the app on iTunes Connect",
                                      is_string: false,
                                      default_value: false),
+        FastlaneCore::ConfigItem.new(key: :itc_users,
+                                     short_option: "-s",
+                                     env_name: "ITC_USERS",
+                                     optional: true,
+                                     type: Array,
+                                     description: "Array of iTunes Connect users. If provided, you can limit access to this newly created app for users with the App Manager, Developer, Marketer or Sales roles",
+                                     is_string: false),
+        # Deprecating this in favor of a rename from "enabled_features" to "enable_services"
+        FastlaneCore::ConfigItem.new(key: :enabled_features,
+                                     deprecated: "Please use `enable_services` instead",
+                                     display_in_shell: false,
+                                     env_name: "PRODUCE_ENABLED_FEATURES",
+                                     description: "Array with Spaceship App Services",
+                                     is_string: false,
+                                     default_value: {},
+                                     verify_block: proc do |value|
+                                                     allowed_keys = Produce::DeveloperCenter::ALLOWED_SERVICES.keys
+                                                     UI.user_error!("enabled_features has to be of type Hash") unless value.kind_of?(Hash)
+                                                     value.each do |key, v|
+                                                       UI.user_error!("The key: '#{key}' is not supported in `enabled_features' - following keys are available: [#{allowed_keys.join(',')}]") unless allowed_keys.include? key.to_sym
+                                                     end
+                                                   end),
+        FastlaneCore::ConfigItem.new(key: :enable_services,
+                                     display_in_shell: false,
+                                     env_name: "PRODUCE_ENABLE_SERVICES",
+                                     description: "Array with Spaceship App Services (e.g. #{allowed_services_description})",
+                                     is_string: false,
+                                     default_value: {},
+                                     verify_block: proc do |value|
+                                                     allowed_keys = Produce::DeveloperCenter::ALLOWED_SERVICES.keys
+                                                     UI.user_error!("enable_services has to be of type Hash") unless value.kind_of?(Hash)
+                                                     value.each do |key, v|
+                                                       UI.user_error!("The key: '#{key}' is not supported in `enable_services' - following keys are available: [#{allowed_keys.join(',')}]") unless allowed_keys.include? key.to_sym
+                                                     end
+                                                   end),
+
         FastlaneCore::ConfigItem.new(key: :skip_devcenter,
                                      short_option: "-d",
                                      env_name: "PRODUCE_SKIP_DEVCENTER",
@@ -109,6 +145,12 @@ module Produce
                                        ENV["FASTLANE_ITC_TEAM_NAME"] = value.to_s
                                      end)
       ]
+    end
+
+    def self.allowed_services_description
+      return Produce::DeveloperCenter::ALLOWED_SERVICES.map do |k, v|
+        "#{k}: (#{v.join('|')})"
+      end.join(", ")
     end
   end
 end

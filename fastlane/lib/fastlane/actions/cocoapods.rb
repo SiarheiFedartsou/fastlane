@@ -24,7 +24,12 @@ module Fastlane
         cmd << '--verbose' if params[:verbose]
         cmd << '--no-ansi' unless params[:ansi]
 
-        Actions.sh(cmd.join(' '), error_callback: params[:error_callback])
+        Actions.sh(cmd.join(' '), error_callback: lambda { |result|
+            Dir.chdir(FastlaneCore::FastlaneFolder.path) do 
+                params[:error_callback].call(result)
+            end
+        })
+
       end
 
       def self.description
